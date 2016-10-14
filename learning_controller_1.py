@@ -16,8 +16,38 @@ import networkx as nx
 def compute_spanning_tree(G):
 
     # The Spanning Tree of G
-    ST = nx.minimum_spanning_tree(G)
+    #ST = nx.minimum_spanning_tree(G)
+    # Spanning Tree using BFS
+    covered_nodes = []
+    to_be_explored = [G.nodes()[0]]
+    while to_be_explored:
+	current_node = to_be_explored.pop(0)
+	if current_node not in covered_nodes:
+		covered_nodes.append(current_node)
+		to_be_explored.extend(G[current_node].keys())
+	
+    active_node = None
+    ST = {}
+    print covered_nodes
+    for node in covered_nodes:
+	ST[node] = []
+    active_node_pointer = 0
+    ctive_node = covered_nodes[active_node_pointer]
+    for node in covered_nodes:
+	if active_node is None:
+		active_node = node
+		continue
+	if node in G[active_node]:
+		ST[active_node].append(node)
+		ST[node].append(active_node)
+	else:
+		while node not in G[active_node]:
+			active_node_pointer += 1
+			active_node = covered_nodes[active_node_pointer]
+		ST[active_node].append(node)
+		ST[node].append(active_node)
 
+    print ST
     return ST
 
 class L2Forwarding(app_manager.RyuApp):
@@ -31,14 +61,15 @@ class L2Forwarding(app_manager.RyuApp):
         # For each node in the graph, add an attribute mac-to-port
         for n in self.G.nodes():
             self.G.add_node(n, mactoport={})
-
+	
         # Compute a Spanning Tree for the graph G
         self.ST = compute_spanning_tree(self.G)
 
 	self.mac_port_map = {}
+	self.count = 1
 
         print self.get_str_topo(self.G)
-        print self.get_str_topo(self.ST)
+        #print self.get_str_topo(self.ST)
 
     # This method returns a string that describes a graph (nodes and edges, with
     # their attributes). You do not need to modify this method.
@@ -59,7 +90,7 @@ class L2Forwarding(app_manager.RyuApp):
         return res
 
     def return_st_neighbor_ports(self, datapath_id):
-	port_info = nx.get_node_attributes(self.ST, 'ports')
+	port_info = nx.get_node_attributes(self.G, 'ports')
 	neighbors = self.ST[datapath_id]
 	neighbors = [str(neighbor) for neighbor in neighbors]
 	return [port_info[datapath_id][neighbor] for neighbor in port_info[datapath_id] if neighbor == 'host' or neighbor in neighbors]
@@ -74,8 +105,15 @@ class L2Forwarding(app_manager.RyuApp):
 
         return res.rstrip('\n')
 
-#    def add_flow_mod(self, datapath, in_port, dst, actions):
-	
+    def add_flow_mod(self, datapath, destination_mac, out_port):
+	of_protocol = datapath.ofproto
+	parser = datapath.ofproto_parser
+	actions = [parser.OFPActionOutput(out_port)]
+	match = parser.OFPMatch(dl_dst=destination_mac)
+	#instructions = [parser.OFPInstructionActions(of_protocol.OFPIT_APPLY_ACTIONS, actions)]
+	flow_mod_msg = parser.OFPFlowMod(datapath=datapath, match=match, command=of_protocol.OFPFC_ADD, actions=actions, cookie=0, priority=1)
+	datapath.send_msg(flow_mod_msg)
+	print str(datapath.id) + " -- " + str(destination_mac) + " : " + str(out_port)
 
     @set_ev_cls(EventSwitchEnter)
     def _ev_switch_enter_handler(self, ev):
@@ -105,21 +143,26 @@ class L2Forwarding(app_manager.RyuApp):
 	if host_id not in self.mac_port_map:
 		self.mac_port_map[host_id] = {}
 	
-	self.mac_port_map[host_id][source_mac] = message.in_port
-	print self.mac_port_map
+	if source_mac not in self.mac_port_map[host_id]:
+		self.mac_port_map[host_id][source_mac] = message.in_port
+		self.add_flow_mod(datapath, source_mac, message.in_port)
+	print self.count
+	self.count += 1
+	#print self.mac_port_map
 
-	if destination_mac in self.mac_port_map[host_id]:
-		actions = [of_protocol_parser.OFPActionOutput(self.mac_port_map[host_id][destination_mac])]
-	else:
-		#print [out_port for out_port in self.return_st_neighbor_ports(host_id)]
-		actions = []
-		for out_port in self.return_st_neighbor_ports(host_id):
-			actions.append(of_protocol_parser.OFPActionOutput(out_port))
+	#if destination_mac in self.mac_port_map[host_id]:
+	#	actions = [of_protocol_parser.OFPActionOutput(self.mac_port_map[host_id][destination_mac])]
+	#else:
+	#	#print [out_port for out_port in self.return_st_neighbor_ports(host_id)]
+	#	actions = []
+	#	for out_port in self.return_st_neighbor_ports(host_id):
+	#		actions.append(of_protocol_parser.OFPActionOutput(out_port))
 
 	#if out_port != ofproto.OFPP_FLOOD:
         #        self.add_flow_mod(dp, msg.in_port, dst, actions)
 	
 	#actions = [of_protocol_parser.OFPActionOutput(of_protocol.OFPP_FLOOD)]
+	actions = [of_protocol_parser.OFPActionOutput(out_port) for out_port in self.return_st_neighbor_ports(host_id)]
         message_out = of_protocol_parser.OFPPacketOut(
             datapath=datapath, buffer_id=message.buffer_id, in_port=message.in_port,
             actions=actions)
