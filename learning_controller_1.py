@@ -145,7 +145,7 @@ class L2Forwarding(app_manager.RyuApp):
 	
 	if source_mac not in self.mac_port_map[host_id]:
 		self.mac_port_map[host_id][source_mac] = message.in_port
-		self.add_flow_mod(datapath, source_mac, message.in_port)
+		self.add_flow_mod(datapath, haddr_to_bin(source_mac), message.in_port)
 	print self.count
 	self.count += 1
 	#print self.mac_port_map
