@@ -16,21 +16,32 @@ import networkx as nx
 def compute_spanning_tree(G):
 
     # The Spanning Tree of G
-    covered_nodes = []
-    to_be_explored = [G.nodes()[0]]
-    while to_be_explored:
-	current_node = to_be_explored.pop(0)
+    covered_nodes = {}
+    to_be_explored = [{G.nodes()[0]: None}] # of the form {node: parent}
+    while len(to_be_explored) > 0:
+	current_node_dict = to_be_explored.pop(0)
+	current_node = current_node_dict.keys()[0]
+	parent_node = current_node_dict[current_node]
 	if current_node not in covered_nodes:
-		covered_nodes.append(current_node)
-		to_be_explored.extend(G[current_node].keys())
-	
+		covered_nodes[current_node] = parent_node
+		new_nodes = [{new_connection: current_node} for new_connection in G[current_node].keys()]
+		to_be_explored.extend(new_nodes)
+    ST = {}
+    for node in covered_nodes:
+	ST[node] = []
+    for node in covered_nodes:
+	if covered_nodes[node] is not None:
+		ST[node].append(covered_nodes[node])
+		ST[covered_nodes[node]].append(node)
+    print ST
+    """
     active_node = None
     ST = {}
     print covered_nodes
     for node in covered_nodes:
 	ST[node] = []
     active_node_pointer = 0
-    ctive_node = covered_nodes[active_node_pointer]
+    # active_node = covered_nodes[active_node_pointer]
     for node in covered_nodes:
 	if active_node is None:
 		active_node = node
@@ -46,6 +57,7 @@ def compute_spanning_tree(G):
 		ST[node].append(active_node)
 
     print ST
+    """
     return ST
 
 
