@@ -16,9 +16,38 @@ import networkx as nx
 def compute_spanning_tree(G):
 
     # The Spanning Tree of G
-    ST = nx.minimum_spanning_tree(G)
+    covered_nodes = []
+    to_be_explored = [G.nodes()[0]]
+    while to_be_explored:
+	current_node = to_be_explored.pop(0)
+	if current_node not in covered_nodes:
+		covered_nodes.append(current_node)
+		to_be_explored.extend(G[current_node].keys())
+	
+    active_node = None
+    ST = {}
+    print covered_nodes
+    for node in covered_nodes:
+	ST[node] = []
+    active_node_pointer = 0
+    ctive_node = covered_nodes[active_node_pointer]
+    for node in covered_nodes:
+	if active_node is None:
+		active_node = node
+		continue
+	if node in G[active_node]:
+		ST[active_node].append(node)
+		ST[node].append(active_node)
+	else:
+		while node not in G[active_node]:
+			active_node_pointer += 1
+			active_node = covered_nodes[active_node_pointer]
+		ST[active_node].append(node)
+		ST[node].append(active_node)
 
+    print ST
     return ST
+
 
 class L2Forwarding(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
@@ -39,7 +68,7 @@ class L2Forwarding(app_manager.RyuApp):
 	self.count = 1
 
         print self.get_str_topo(self.G)
-        print self.get_str_topo(self.ST)
+        # print self.get_str_topo(self.ST)
 
     # This method returns a string that describes a graph (nodes and edges, with
     # their attributes). You do not need to modify this method.
@@ -60,7 +89,7 @@ class L2Forwarding(app_manager.RyuApp):
         return res
 
     def return_st_neighbor_ports(self, datapath_id):
-	port_info = nx.get_node_attributes(self.ST, 'ports')
+	port_info = nx.get_node_attributes(self.G, 'ports')
 	neighbors = self.ST[datapath_id]
 	neighbors = [str(neighbor) for neighbor in neighbors]
 	return [port_info[datapath_id][neighbor] for neighbor in port_info[datapath_id] if neighbor == 'host' or neighbor in neighbors]
@@ -117,9 +146,7 @@ class L2Forwarding(app_manager.RyuApp):
 	if destination_mac in self.mac_port_map[datapath_id]:
 		out_port = self.mac_port_map[datapath_id][destination_mac]
 		map_found_flag = True
-	print self.count
-	self.count += 1
-
+	
 	packet_data = None
 	if message.buffer_id == of_protocol.OFP_NO_BUFFER:
 		packet_data = message.data
@@ -127,20 +154,6 @@ class L2Forwarding(app_manager.RyuApp):
 	if map_found_flag:
 		self.add_flow_mod(datapath, message.in_port, destination_mac, out_port)
 		actions = [of_protocol_parser.OFPActionOutput(out_port)]
-	# print self.mac_port_map
-
-	#if destination_mac in self.mac_port_map[host_id]:
-	#	actions = [of_protocol_parser.OFPActionOutput(self.mac_port_map[host_id][destination_mac])]
-	#else:
-	#	#print [out_port for out_port in self.return_st_neighbor_ports(host_id)]
-	#	actions = []
-	#	for out_port in self.return_st_neighbor_ports(host_id):
-	#		actions.append(of_protocol_parser.OFPActionOutput(out_port))
-
-	#if out_port != ofproto.OFPP_FLOOD:
-        #        self.add_flow_mod(dp, msg.in_port, dst, actions)
-	
-	#actions = [of_protocol_parser.OFPActionOutput(of_protocol.OFPP_FLOOD)]
 	else:
 		actions = [of_protocol_parser.OFPActionOutput(out_port) for out_port in self.return_st_neighbor_ports(datapath_id)]
         message_out = of_protocol_parser.OFPPacketOut(
